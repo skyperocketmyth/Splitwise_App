@@ -1,24 +1,78 @@
 /**
- * SplitEasy - Splitwise-style expense splitting web app
+ * SplitEasy — Google Apps Script JSON API backend
  *
- * Connected to the Google Sheet below for all data persistence.
- * Publish: Extensions > Apps Script > Deploy > New Deployment >
- *          Web app > Execute as "Me" > Who has access "Anyone" > Deploy
+ * Frontend is hosted on GitHub Pages and calls this as a REST API.
  *
- * Sheet tabs created automatically: "Groups", one tab per group.
- * "Users" tab must already exist with names in Column A (row 1 = header).
+ * Deploy: Extensions > Apps Script > Deploy > New Deployment >
+ *         Web app > Execute as "Me" > Who has access "Anyone" > Deploy
+ *
+ * Sheet tabs: "Users" (col A = names, row 1 = header), auto-created "Groups" + per-group tabs.
  */
 
 const SHEET_ID = '1Q7uUb4WLmT1NRp-dItIu9qYpQ2nNUgAI9yEaP4-Lakc';
 
 // ─────────────────────────────────────────────
-// ENTRY POINT
+// HTTP ENTRY POINTS
 // ─────────────────────────────────────────────
 
-function doGet() {
-  return HtmlService.createHtmlOutputFromFile('index')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
+function doGet(e) {
+  const action = e.parameter.action;
+  try {
+    let data;
+    if (action === 'getGlobalUsers') {
+      data = getGlobalUsers();
+    } else if (action === 'getGroupsWithBalances') {
+      data = getGroupsWithBalances(e.parameter.user);
+    } else if (action === 'getGroupData') {
+      data = getGroupData(e.parameter.group);
+    } else {
+      throw new Error('Unknown action: ' + action);
+    }
+    return jsonOk(data);
+  } catch (err) {
+    return jsonErr(err.message);
+  }
+}
+
+function doPost(e) {
+  const action = e.parameter.action;
+  let body = {};
+  try { body = JSON.parse(e.postData.contents || '{}'); } catch (_) {}
+  try {
+    let data;
+    if (action === 'createGroup') {
+      data = createGroup(body.name, body.members);
+    } else if (action === 'addMemberToGroup') {
+      data = addMemberToGroup(body.group, body.member);
+    } else if (action === 'removeMemberFromGroup') {
+      data = removeMemberFromGroup(body.group, body.member);
+    } else if (action === 'addExpense') {
+      data = addExpense(body.group, body.expense);
+    } else if (action === 'updateExpense') {
+      data = updateExpense(body.group, body.id, body.expense);
+    } else if (action === 'deleteExpense') {
+      data = deleteExpense(body.group, body.id);
+    } else if (action === 'settleDebt') {
+      data = settleDebt(body.group, body.from, body.to, body.amount);
+    } else {
+      throw new Error('Unknown action: ' + action);
+    }
+    return jsonOk(data);
+  } catch (err) {
+    return jsonErr(err.message);
+  }
+}
+
+function jsonOk(data) {
+  return ContentService
+    .createTextOutput(JSON.stringify({ data: data }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function jsonErr(msg) {
+  return ContentService
+    .createTextOutput(JSON.stringify({ error: msg }))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 // ─────────────────────────────────────────────
@@ -80,11 +134,7 @@ function getGroupsWithBalances(userName) {
     .map(row => {
       let members = [];
       try { members = JSON.parse(row[1]); } catch (e) { members = []; }
-      return {
-        name: row[0].toString().trim(),
-        members: members,
-        created: parseDate_(row[2])
-      };
+      return { name: row[0].toString().trim(), members: members, created: parseDate_(row[2]) };
     })
     .filter(group => group.members.includes(userName))
     .map(group => {
@@ -156,7 +206,6 @@ function getGroupData(groupName) {
   const safeSheetName = sanitizeSheetName_(groupName);
   const sheet = spreadsheet.getSheetByName(safeSheetName);
 
-  // Fetch members from Groups sheet
   const groupsSheet = ensureGroupsSheet_();
   const groupsData = groupsSheet.getDataRange().getValues();
   let members = [];

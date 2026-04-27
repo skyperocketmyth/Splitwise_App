@@ -6,6 +6,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="SplitEasy">
   <meta name="theme-color" content="#6C63FF">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icon.svg">
   <title>SplitEasy</title>
   <style>
     /* ── Design tokens ── */
@@ -92,6 +94,30 @@
     .btn-dismiss-install {
       width: 28px; height: 28px; color: var(--muted); font-size: 18px;
       display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+
+    /* ── Install instructions modal ── */
+    .install-modal {
+      position: fixed; inset: 0; background: rgba(26,26,46,.5);
+      display: flex; align-items: flex-end; justify-content: center;
+      z-index: 1500;
+    }
+    .install-modal-sheet {
+      background: #fff; width: 100%; max-width: 640px;
+      border-radius: 24px 24px 0 0; padding: 24px 24px 40px;
+    }
+    .install-modal-title { font-size: 18px; font-weight: 800; margin-bottom: 18px; }
+    .install-step { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 16px; }
+    .install-step-num {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--primary); color: #fff; font-weight: 800; font-size: 13px;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px;
+    }
+    .install-step-text { font-size: 14px; color: var(--text); line-height: 1.5; }
+    .install-step-text strong { font-weight: 700; }
+    .btn-install-close {
+      width: 100%; padding: 14px; background: var(--primary); color: #fff;
+      border-radius: var(--radius-sm); font-size: 15px; font-weight: 700; margin-top: 8px;
     }
 
     /* ── App header (shared) ── */
@@ -482,6 +508,24 @@
   <button class="btn-dismiss-install" id="btn-dismiss-install">✕</button>
 </div>
 
+<!-- ── Install instructions modal ── -->
+<div id="modal-install-instructions" class="install-modal hidden">
+  <div class="install-modal-sheet">
+    <p class="install-modal-title" id="install-modal-title">Add to Home Screen</p>
+    <div id="install-steps-ios" class="hidden">
+      <div class="install-step"><div class="install-step-num">1</div><p class="install-step-text">Tap the <strong>Share</strong> button at the bottom of Safari (box with arrow pointing up)</p></div>
+      <div class="install-step"><div class="install-step-num">2</div><p class="install-step-text">Scroll down and tap <strong>"Add to Home Screen"</strong></p></div>
+      <div class="install-step"><div class="install-step-num">3</div><p class="install-step-text">Tap <strong>Add</strong> in the top-right corner</p></div>
+    </div>
+    <div id="install-steps-android" class="hidden">
+      <div class="install-step"><div class="install-step-num">1</div><p class="install-step-text">Tap the <strong>⋮ menu</strong> (three dots) in Chrome's top-right corner</p></div>
+      <div class="install-step"><div class="install-step-num">2</div><p class="install-step-text">Tap <strong>"Add to Home screen"</strong></p></div>
+      <div class="install-step"><div class="install-step-num">3</div><p class="install-step-text">Tap <strong>Add</strong> to confirm</p></div>
+    </div>
+    <button class="btn-install-close" id="btn-close-install-modal">Got it</button>
+  </div>
+</div>
+
 <!-- ═══════════════════════════════════════
      VIEW: Landing
      ═══════════════════════════════════════ -->
@@ -700,6 +744,11 @@
 
 <script>
 // ═══════════════════════════════════════════════
+// CONFIG — paste your Apps Script /exec URL here
+// ═══════════════════════════════════════════════
+const SCRIPT_URL = 'YOUR_APPS_SCRIPT_EXEC_URL';
+
+// ═══════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════
 const S = {
@@ -718,21 +767,35 @@ const S = {
 // API
 // ═══════════════════════════════════════════════
 const api = {
-  _call(fn, ...args) {
-    return new Promise((res, rej) => {
-      google.script.run.withSuccessHandler(res).withFailureHandler(rej)[fn](...args);
-    });
+  async _get(action, params = {}) {
+    const qs = new URLSearchParams({ action, ...params });
+    const r = await fetch(`${SCRIPT_URL}?${qs}`, { redirect: 'follow' });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    return d.data;
   },
-  getGlobalUsers:    ()              => api._call('getGlobalUsers'),
-  getGroups:         (u)             => api._call('getGroupsWithBalances', u),
-  createGroup:       (n, m)          => api._call('createGroup', n, m),
-  getGroupData:      (n)             => api._call('getGroupData', n),
-  addMember:         (g, m)          => api._call('addMemberToGroup', g, m),
-  removeMember:      (g, m)          => api._call('removeMemberFromGroup', g, m),
-  addExpense:        (g, e)          => api._call('addExpense', g, e),
-  updateExpense:     (g, id, e)      => api._call('updateExpense', g, id, e),
-  deleteExpense:     (g, id)         => api._call('deleteExpense', g, id),
-  settleDebt:        (g, f, t, a)    => api._call('settleDebt', g, f, t, a)
+  async _post(action, body = {}) {
+    // text/plain avoids CORS preflight; Apps Script reads e.postData.contents regardless
+    const r = await fetch(`${SCRIPT_URL}?action=${encodeURIComponent(action)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(body),
+      redirect: 'follow'
+    });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    return d.data;
+  },
+  getGlobalUsers:  ()             => api._get('getGlobalUsers'),
+  getGroups:       (u)            => api._get('getGroupsWithBalances', { user: u }),
+  createGroup:     (n, m)         => api._post('createGroup',          { name: n, members: m }),
+  getGroupData:    (n)            => api._get('getGroupData',          { group: n }),
+  addMember:       (g, m)         => api._post('addMemberToGroup',     { group: g, member: m }),
+  removeMember:    (g, m)         => api._post('removeMemberFromGroup',{ group: g, member: m }),
+  addExpense:      (g, e)         => api._post('addExpense',           { group: g, expense: e }),
+  updateExpense:   (g, id, e)     => api._post('updateExpense',        { group: g, id, expense: e }),
+  deleteExpense:   (g, id)        => api._post('deleteExpense',        { group: g, id }),
+  settleDebt:      (g, f, t, a)   => api._post('settleDebt',          { group: g, from: f, to: t, amount: a })
 };
 
 // ═══════════════════════════════════════════════
@@ -1315,41 +1378,39 @@ async function submitSettle() {
 // PWA
 // ═══════════════════════════════════════════════
 function setupPWA() {
-  // Dynamic manifest via Blob URL (works for Chrome install prompt)
-  const iconSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="115" fill="#6C63FF"/><text x="256" y="340" font-family="Arial,sans-serif" font-size="260" font-weight="bold" fill="white" text-anchor="middle">SE</text></svg>`;
-  const iconDataURL = 'data:image/svg+xml;base64,' + btoa(iconSVG);
+  // Register service worker (enables Chrome install prompt + offline)
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }
 
-  // Apple touch icon
-  const atLink = document.createElement('link');
-  atLink.rel = 'apple-touch-icon'; atLink.href = iconDataURL;
-  document.head.appendChild(atLink);
+  const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+  const dismissed = sessionStorage.getItem('installDismissed');
 
-  // Manifest
-  const manifest = {
-    name: 'SplitEasy', short_name: 'SplitEasy',
-    description: 'Split expenses with friends',
-    start_url: window.location.href,
-    display: 'standalone', orientation: 'portrait-primary',
-    background_color: '#FFFFFF', theme_color: '#6C63FF',
-    icons: [{ src: iconDataURL, sizes: '512x512', type: 'image/svg+xml', purpose: 'any maskable' }]
-  };
-  try {
-    const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
-    const mLink = document.createElement('link');
-    mLink.rel = 'manifest'; mLink.href = URL.createObjectURL(blob);
-    document.head.appendChild(mLink);
-  } catch(e) {}
-
-  // Install prompt (Android Chrome)
+  // Native install prompt (Android Chrome — fires when SW + manifest criteria met)
   window.addEventListener('beforeinstallprompt', e => {
     e.preventDefault();
     window._pwaPrompt = e;
-    document.getElementById('install-banner').classList.remove('hidden');
+    if (!dismissed) document.getElementById('install-banner').classList.remove('hidden');
   });
   window.addEventListener('appinstalled', () => {
     document.getElementById('install-banner').classList.add('hidden');
     window._pwaPrompt = null;
   });
+
+  // On iOS, show manual instructions banner (no beforeinstallprompt on Safari)
+  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (isIOS && !dismissed) {
+    document.getElementById('install-banner').classList.remove('hidden');
+  }
+}
+
+function openInstallInstructions() {
+  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  document.getElementById('install-modal-title').textContent = isIOS
+    ? 'Add to Home Screen (iOS)' : 'Add to Home Screen (Android)';
+  document.getElementById('install-steps-ios').classList.toggle('hidden', !isIOS);
+  document.getElementById('install-steps-android').classList.toggle('hidden', isIOS);
+  document.getElementById('modal-install-instructions').classList.remove('hidden');
 }
 
 // ═══════════════════════════════════════════════
@@ -1365,10 +1426,16 @@ document.addEventListener('DOMContentLoaded', () => {
         window._pwaPrompt = null;
         document.getElementById('install-banner').classList.add('hidden');
       });
+    } else {
+      openInstallInstructions();
     }
   });
   document.getElementById('btn-dismiss-install').addEventListener('click', () => {
     document.getElementById('install-banner').classList.add('hidden');
+    sessionStorage.setItem('installDismissed', '1');
+  });
+  document.getElementById('btn-close-install-modal').addEventListener('click', () => {
+    document.getElementById('modal-install-instructions').classList.add('hidden');
   });
 
   // Groups view

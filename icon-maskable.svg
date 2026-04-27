@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Full bleed background for maskable (no rounded corners) -->
+  <rect width="512" height="512" fill="#6C63FF"/>
+  <!-- Content kept within the central 80% safe zone -->
+  <text x="256" y="320" font-family="Arial,sans-serif" font-size="200" font-weight="bold" fill="white" text-anchor="middle">SE</text>
+</svg>
