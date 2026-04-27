@@ -54,6 +54,8 @@ function doPost(e) {
       data = deleteExpense(body.group, body.id);
     } else if (action === 'settleDebt') {
       data = settleDebt(body.group, body.from, body.to, body.amount);
+    } else if (action === 'addGlobalUser') {
+      data = addGlobalUser(body.name);
     } else {
       throw new Error('Unknown action: ' + action);
     }
@@ -116,6 +118,20 @@ function getGlobalUsers() {
   return data.slice(1)
     .map(row => (row[0] || '').toString().trim())
     .filter(name => name !== '');
+}
+
+function addGlobalUser(name) {
+  name = (name || '').toString().trim();
+  if (!name) throw new Error('Name cannot be empty.');
+  const sheet = ss_().getSheetByName('Users');
+  if (!sheet) throw new Error('Users sheet not found.');
+  const existing = getGlobalUsers();
+  if (existing.some(u => u.toLowerCase() === name.toLowerCase())) {
+    throw new Error('"' + name + '" already exists.');
+  }
+  sheet.appendRow([name]);
+  SpreadsheetApp.flush();
+  return { success: true, name: name };
 }
 
 // ─────────────────────────────────────────────

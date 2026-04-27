@@ -221,6 +221,16 @@
     .user-row-sub  { font-size: 12px; color: var(--muted); margin-top: 2px; }
     .user-row-arrow { color: var(--border); flex-shrink: 0; }
 
+    .add-user-row { border: 1.5px dashed var(--border) !important; background: transparent !important; box-shadow: none !important; margin-top: 2px; }
+    .add-user-row:hover { border-color: var(--primary) !important; background: rgba(108,99,255,.04) !important; box-shadow: none !important; }
+    .add-user-icon { background: rgba(108,99,255,.15) !important; color: var(--primary) !important; font-size: 22px !important; font-weight: 400 !important; }
+    .add-user-form { background: var(--card); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow-sm); border: 1.5px solid var(--primary); display: flex; flex-direction: column; gap: 12px; margin-top: 2px; }
+    .add-user-input { width: 100%; padding: 12px 14px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); font-size: 16px; outline: none; background: var(--bg); color: var(--text); }
+    .add-user-input:focus { border-color: var(--primary); }
+    .add-user-actions { display: flex; gap: 8px; }
+    .btn-cancel-user { flex: 1; padding: 11px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); color: var(--muted); font-size: 14px; font-weight: 600; background: transparent; cursor: pointer; }
+    .btn-save-user { flex: 2; padding: 11px; border-radius: var(--radius-sm); background: var(--primary); color: #fff; font-size: 14px; font-weight: 700; cursor: pointer; }
+
     /* ══════════════════════════════════════
        GROUPS VIEW
        ══════════════════════════════════════ */
@@ -541,6 +551,22 @@
   <div class="landing-body">
     <p class="landing-prompt">Select your profile</p>
     <div id="user-list" class="user-list"></div>
+    <div id="add-user-wrap" style="margin-top:10px;">
+      <button id="btn-show-add-user" class="user-row add-user-row" style="width:100%;text-align:left;">
+        <div class="user-row-avatar add-user-icon">+</div>
+        <div class="user-row-info">
+          <p class="user-row-name" style="color:var(--primary)">Add new user</p>
+          <p class="user-row-sub">Register a new profile</p>
+        </div>
+      </button>
+      <div id="add-user-form" class="add-user-form hidden">
+        <input id="add-user-input" class="add-user-input" type="text" placeholder="Enter full name…" autocomplete="off" autocapitalize="words" />
+        <div class="add-user-actions">
+          <button id="btn-cancel-add-user" class="btn-cancel-user">Cancel</button>
+          <button id="btn-confirm-add-user" class="btn-save-user">Add User</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -790,6 +816,7 @@ const api = {
     return d.data;
   },
   getGlobalUsers:  ()             => api._get('getGlobalUsers'),
+  addGlobalUser:   (n)            => api._post('addGlobalUser',       { name: n }),
   getGroups:       (u)            => api._get('getGroupsWithBalances', { user: u }),
   createGroup:     (n, m)         => api._post('createGroup',          { name: n, members: m }),
   getGroupData:    (n)            => api._get('getGroupData',          { group: n }),
@@ -900,6 +927,24 @@ async function selectUser(name) {
   document.getElementById('header-username').textContent = name;
   showView('view-groups');
   await loadGroups();
+}
+
+async function handleAddUser() {
+  const input = document.getElementById('add-user-input');
+  const name = input.value.trim();
+  if (!name) { input.focus(); return; }
+  showLoading('Adding user…');
+  try {
+    await api.addGlobalUser(name);
+    S.globalUsers.push(name);
+    input.value = '';
+    document.getElementById('add-user-form').classList.add('hidden');
+    document.getElementById('btn-show-add-user').classList.remove('hidden');
+    renderLanding();
+    showToast(name + ' added!', 'success');
+  } catch(e) {
+    showToast(e.message, 'error');
+  } finally { hideLoading(); }
 }
 
 // ═══════════════════════════════════════════════
@@ -1439,6 +1484,23 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.getElementById('btn-close-install-modal').addEventListener('click', () => {
     document.getElementById('modal-install-instructions').classList.add('hidden');
+  });
+
+  // Add user (landing)
+  document.getElementById('btn-show-add-user').addEventListener('click', () => {
+    document.getElementById('btn-show-add-user').classList.add('hidden');
+    document.getElementById('add-user-form').classList.remove('hidden');
+    document.getElementById('add-user-input').focus();
+  });
+  document.getElementById('btn-cancel-add-user').addEventListener('click', () => {
+    document.getElementById('add-user-input').value = '';
+    document.getElementById('add-user-form').classList.add('hidden');
+    document.getElementById('btn-show-add-user').classList.remove('hidden');
+  });
+  document.getElementById('btn-confirm-add-user').addEventListener('click', handleAddUser);
+  document.getElementById('add-user-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') handleAddUser();
+    if (e.key === 'Escape') document.getElementById('btn-cancel-add-user').click();
   });
 
   // Groups view
