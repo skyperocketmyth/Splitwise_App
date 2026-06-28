@@ -1,0 +1,10 @@
+index.html
+Code.gs
+node_modules/**
+.git/**
+jsconfig.json
+manifest.json
+icon.svg
+icon-maskable.svg
+sw.js
+CLAUDE.md
