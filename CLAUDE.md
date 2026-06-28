@@ -8,7 +8,7 @@ A Splitwise-style expense-splitting PWA. The frontend is a **single HTML file** 
 ```
 index.html  (PWA frontend — single file, no build step)
   ↕  JSON API (fetch)
-Code.gs     (Google Apps Script — deployed at SCRIPT_URL in index.html)
+Code.js     (Google Apps Script — deployed at SCRIPT_URL in index.html)
   ↕
 Google Sheet ID: 1Q7uUb4WLmT1NRp-dItIu9qYpQ2nNUgAI9yEaP4-Lakc
   Tabs: "Users", "Groups", one tab per group
@@ -21,14 +21,16 @@ Google Sheet ID: 1Q7uUb4WLmT1NRp-dItIu9qYpQ2nNUgAI9yEaP4-Lakc
 - Bump the cache name in `sw.js` (`CACHE = 'spliteasy-vN'`) whenever `index.html` changes, so mobile PWA clients get the update.
 - Currency is **AED** throughout. Do not add currency configuration.
 
-### Apps Script (`Code.gs`)
-The file in this repo is the source of truth. After editing `Code.gs`:
-1. Open [script.google.com](https://script.google.com), open the project linked to the Sheet above.
-2. Paste/replace the updated functions.
-3. **Deploy → Manage Deployments → Edit (pencil) → New version → Deploy.**
-4. The URL in `index.html` (`SCRIPT_URL`) does NOT change between deployments.
+### Apps Script (`Code.js`)
+`Code.js` is the source of truth — edit it directly. Deploy via clasp:
+```
+npx @google/clasp push --force
+npx @google/clasp deploy --deploymentId <existing-id> --description "..."
+```
+Or manually: open [script.google.com](https://script.google.com) → paste the updated code → **Deploy → Manage Deployments → Edit → New version → Deploy.**
+The URL in `index.html` (`SCRIPT_URL`) does NOT change between deployments.
 
-## Key API actions (doPost in Code.gs)
+## Key API actions (doPost in Code.js)
 | Action | What it does |
 |--------|-------------|
 | `getGlobalUsers` | Returns all names from the Users sheet |
@@ -43,7 +45,7 @@ The file in this repo is the source of truth. After editing `Code.gs`:
 | `addMemberToGroup` | Adds a member name to the group's JSON member list |
 | `removeMemberFromGroup` | Removes a member (blocked if they have an outstanding balance) |
 
-## Balance calculation (Code.gs `calculateNetBalances_`)
+## Balance calculation (Code.js `calculateNetBalances_`)
 - Regular expenses: each participant owes `paidBy` their share from `splitAmounts`.
 - Settlements: `participants[0]` (debtor) owes `participants[1]` (creditor) **less** by the settled amount. Only one `add_()` call — no reverse debt is created.
 - Net calculation: for each pair, `fromOwesTo - toOwesFrom`; only emit if `|net| > 0.005`.

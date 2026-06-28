@@ -1,5 +1,4 @@
 index.html
-Code.gs
 node_modules/**
 .git/**
 jsconfig.json
